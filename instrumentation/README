@@ -1,0 +1,43 @@
+This code automatically instruments JAVA code so that hardware counters can be measured through PAPI library.
+This also uses javassist to eneable runtime instrumentation of JAVA packages
+
+External tools required:
+1) You need to down load and install PAPI from the following link:
+http://icl.cs.utk.edu/papi/software/index.html  <version 5.0.1>
+The library should be avialable at /usr/local/lib
+
+2) For instrumentation of java codes you would need javassist which can be found at: http://www.csg.ci.i.u-tokyo.ac.jp/~chiba/javassist/
+
+
+
+Do the following steps to create libraries and executables..
+
+make clean
+make
+make java
+make jar
+
+There is a simple application to do basic testing:
+javac papi_jni_main.java
+./run_test.sh
+
+Then if you have a java toy example, follow the example in run_test.sh
+If you need to run the JAVA application through Ant, follow the modified buil.xml for hadoopcase.
+
+
+c++ directory: contains the c++ code used to integrate PAPI through JNI
+
+I have created 3 functions which internally handles all HW counter managment and measurement using various call to PAPI library..
+1) papiJ_PAPI_JNI_library_init => Initilizes the library. Adds events to be measured. (we are measuring 50 events at a time) Enables multiplexing etc.
+
+2) papiJ_PAPI_JNI_start => starts the counter for measurement
+
+3) papiJ_PAPI_JNI_stop => stops the counter for measurement, takes care of the overflow conditions.
+
+papiJ.java:  Contains wrappers on those JNI APIs for easy use
+ProfilerTransformation.java: Does runtime instrumentation for java packages
+ProfilerMain.java: contains the premain function
+papi_jni_main.java: contains a small toy example
+AddShutdownHook.java: Adds a shutdown hook to the application (This does not work with PAPI for large Ant based application runs on Hadoop, we have an alternative based on destructors)
+
+Manifest.txt: Is used by javaassist to instrument using premain class from ProfilerMain.java

@@ -6,12 +6,17 @@ public static void premain(String agentArguments,
 Instrumentation instrumentation) {
 final ProfilerTransformer pt = new ProfilerTransformer();
 
+/*
 Runtime.getRuntime().addShutdownHook(new Thread() {
 public void run() {
-pt.saveData();
+pt.dumpMetrics();
 }
 });
+*/
 
 instrumentation.addTransformer(pt);
-}	
+}
+
+//pt.attachShutDownHook();
+
 }

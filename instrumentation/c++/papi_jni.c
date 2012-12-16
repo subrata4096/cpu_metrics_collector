@@ -1,12 +1,18 @@
 #include <iostream>
+#include <pthread.h>
+#include <fstream>
 #include <stdlib.h>
 #include <stdio.h>
+#include <sstream>
 
 #include <papi.h>
 #include "papiJ.h"
+#include <map>
 
 using namespace std;
 
+//add hw events to be measured...
+//following events are for mensa.ecn.purdue.edu
 static int Events[] = {
  PAPI_L1_DCM,
 PAPI_L2_DCM,
@@ -64,11 +70,38 @@ PAPI_REF_CYC
 
 #define NUMEVENTS (sizeof(Events) / sizeof(int))
 #define MSIZE 2000
-#define THRESHOLD 100000
+#define THRESHOLD 10000
 static int EventSet;
 
 static long_long values[NUMEVENTS];
 static double dvalues[NUMEVENTS];
+static map<string,bool> methodNameOutputFileMap;
+static map<string,string> metricsMap;
+void writeResults();
+
+
+//this dumpClass is used mainly for its destructor. We need a hook to know when the program is going to exit.
+//just before exiting we want to print all the metric
+//the destructor of this class will be called when the system is going to exit as it has a static instance..
+class dumpClass
+{
+  public:
+  int* i;
+  dumpClass()
+  {
+     cout << " *** constructor called " << "\n";
+    i = new int(0);
+  }
+  ~dumpClass()
+  {
+     cout << " *** destructor called " << "\n";
+     writeResults();
+     delete i;
+  }
+
+};
+
+static dumpClass scopeInstance;
 
 void handler(int EventSet, void *address, long_long overflow_vector, void *context)
 {
@@ -77,12 +110,12 @@ void handler(int EventSet, void *address, long_long overflow_vector, void *conte
 	/* Stop counting events */
 	if (PAPI_read(EventSet, values) != PAPI_OK)
 	{ 
-		printf("Error\n");
+		printf("PAPI handler read Error\n");
 		return ;
 	}
 
-	fprintf(stderr, "handler(%d) Overflow at %p! vector=0x%llx\n",
-			EventSet, address, overflow_vector);
+	//fprintf(stderr, "handler(%d) Overflow at %p! vector=0x%llx\n",
+	//		EventSet, address, overflow_vector);
 
 	for(i = 0; i < NUMEVENTS; i++) {
 		dvalues[i] += i ? (double)values[i] : THRESHOLD;
@@ -91,24 +124,91 @@ void handler(int EventSet, void *address, long_long overflow_vector, void *conte
 
 	if (PAPI_reset(EventSet) != PAPI_OK)
 	{ 
-		printf("Error\n");
+		printf("PAPI handler reset Error\n");
 		return ;
 	}
 
 }
 
-void print_results()
-{ char eventName[PAPI_MAX_STR_LEN];
-	int i;
+string checkFileName(string fName, int i)
+{
+         stringstream ss;
+	map<string,bool> :: iterator fPos = 
+                             methodNameOutputFileMap.find(fName); 
+	if(fPos != methodNameOutputFileMap.end())
+	{
+		ss << fName <<  "_" << i;
+	}
+        else
+        {
+             methodNameOutputFileMap[fName] = true;
+             return fName;
+        }
+	
+        string fModified = string(ss.str());
+        return checkFileName(fModified,(i+1));
+}
+void print_results(const char* methodName)
+{
+        string dumpFileName = string(methodName);
+        dumpFileName = checkFileName(dumpFileName,1);
 
+        char eventName[PAPI_MAX_STR_LEN];
+	int i;
+        stringstream ss;
+        ss << string(methodName) << "," ;
 	for(i = 0; i < NUMEVENTS; i++) {
 		if (PAPI_event_code_to_name(Events[i], eventName) != PAPI_OK)
 		{
-			printf("Error\n");
-			return;
+			printf("PAPI event code to name Error\n");
+			//return;
+                        continue;
 		}
-		printf("  Event %15s: %15.0lf\n", eventName, dvalues[i]);
+	//	printf("  Event %15s: %15.0lf\n", eventName, dvalues[i]);
+                ss << dvalues[i] << ",";  
 	}
+        ss << "\n";
+        metricsMap[dumpFileName] = string(ss.str());
+        
+       // printf("\n ***** HERE **  \n");
+       // cout << ss.str() << "\n";
+        //fstream myFile;
+        //string fName = "/home/mitra4/" + dumpFileName;
+        //myFile.open(fName.c_str());
+        //myFile << ss.str();
+        //myFile.close();
+}
+
+void writeResults()
+{
+  string outputFileName = "output_papi_results.txt";
+   ofstream myFile;
+   myFile.open(outputFileName.c_str());
+  char eventName[PAPI_MAX_STR_LEN];
+  int i;
+   myFile << "Function Name,";
+   for(i = 0; i < NUMEVENTS; i++) {
+                if (PAPI_event_code_to_name(Events[i], eventName) != PAPI_OK)
+                {
+                        printf("PAPI event code to name Error\n");
+                        continue;
+                }
+                myFile << eventName << ",";
+        }
+    myFile << "\n";
+
+   map<string,string>::iterator ii = metricsMap.begin();
+   map<string,string>::iterator jj = metricsMap.end();
+   for(;ii != jj; ii++)
+{
+   
+   //myFile << (*ii).first << "\n";
+   myFile << (*ii).second << "\n";
+   //cout << (*ii).first << "\n";
+   //cout << (*ii).second << "\n";
+}
+
+   myFile.close();
 
 }
 
@@ -116,35 +216,53 @@ void print_results()
 	JNIEXPORT jint JNICALL Java_papiJ_PAPI_1JNI_1library_1init
 (JNIEnv *env, jobject obj,jint ver)
 {
+        int* scope = scopeInstance.i;
+        cout << *(scope) << "\n";
 	jint ret = -1;
 	EventSet = PAPI_NULL;
 	ret = PAPI_library_init(ver);
 	cout << " calling from interface " << ver << " and " << ret << "\n";
 	if(ret == -1)
 	{ 
-		printf("Error\n");
-		return ret;
+		printf("PAPI library init Error\n");
+		//return ret;
+                exit(0);
 	}
 
 	PAPI_multiplex_init();
+
+
+        if (PAPI_thread_init(pthread_self) != PAPI_OK)
+        { 
+         	printf("PAPI thread init Error\n");
+		//return -1;
+                exit(0);
+        }
+
+/*
+      //this API is not low level, not thread safe...so should not be used here....
 	int num_hwcntrs = 0;
 	if ((num_hwcntrs = PAPI_num_counters()) <= PAPI_OK)
 	{
-		printf("Error\n");
+		printf("PAPI hw count Error\n");
 		return -1;
 	}
 	printf("Hw counters:%d\n",num_hwcntrs);
+*/
 
 	if(PAPI_create_eventset(&EventSet) != PAPI_OK)
-	{   
-		printf("Error\n");
-		return -1;
+	{  
+		printf("PAPI create eventset Error\n");
+		//return -1;
+                exit(0);
 	}
+        //int thread_id =  pthread_self(); 
+        //        printf("PAPI thread id is: %d\n",thread_id);
 	printf("eventset created\n");
 
 	if (PAPI_assign_eventset_component(EventSet, 0) != PAPI_OK)
 	{
-		printf("Error\n");
+		printf("PAPI assign eventset Error\n");
 		return -1;
 	}
 	ret = PAPI_set_multiplex(EventSet);
@@ -157,25 +275,26 @@ void print_results()
 		ret = PAPI_add_event(EventSet, Events[i]);
 		if (ret != PAPI_OK)
 		{
-			printf("Error\n");
+			printf("PAPI add event Error\n");
 			//return -1;
 
 		}
-		printf("Adding even %d : %d   Error = %d\n",i,Events[i],ret);
-#if 0
-                if(PAPI_overflow(EventSet, Events[i], THRESHOLD, 0, handler) != PAPI_OK)
+		printf("Adding event %d : %d   Error = %d\n",i,Events[i],ret);
+
+//NOTE: check if following call disrupts the behavior....                
+		if(PAPI_overflow(EventSet, Events[i], THRESHOLD, 0, handler) != PAPI_OK)
                 {
-                  printf("Error\n");
-                  return -1;
+                  //printf("Could not add overflow threashold for Event[%d]: Error\n",i);
+                  //return -1;
+                  continue;
                 }
-#endif
 
 	}
 	ret = PAPI_get_multiplex(EventSet);
 	printf("get mutiplex event ret val: %d\n",ret);
 
 
-	printf("This system has %d available counters.\n", num_hwcntrs);
+//	printf("This system has %d available counters.\n", num_hwcntrs);
 	int num_events = 1*NUMEVENTS;
 	printf("We will count %d events.\n", num_events);
 
@@ -198,32 +317,63 @@ JNIEXPORT jint JNICALL Java_papiJ_PAPI_1JNI_1threads_1init
 }
 
 	JNIEXPORT jint JNICALL Java_papiJ_PAPI_1JNI_1start
-(JNIEnv * env, jobject obj, jint event_set_num)
+(JNIEnv * env, jobject obj, jstring methodName)
 {
+        //return -1;
         jint ret = PAPI_OK;
-	if (PAPI_start(EventSet) != PAPI_OK)
+const char *str= (env)->GetStringUTFChars(methodName,0);
+         //int thread_id =  pthread_self(); 
+             //   printf("PAPI thread id is: %d\n",thread_id);
+int papi_ret = PAPI_start(EventSet);
+	if (papi_ret != PAPI_OK)
 	{
-		printf("Error\n");
+		cout << "PAPI start Error : " << papi_ret << " : "  << str << "\n";
+	(env)->ReleaseStringUTFChars(methodName, str);
 		return -1;
 	}
+        else
+{
+//  printf("PAPI start Good\n");
+
+}
+	(env)->ReleaseStringUTFChars(methodName, str);
         return ret;
 }
 
 	JNIEXPORT jint JNICALL Java_papiJ_PAPI_1JNI_1stop
-(JNIEnv *env , jobject obj, jint event_set_num)
+(JNIEnv *env , jobject obj, jstring methodName)
 {
+       //return -1;
         jint ret = PAPI_OK;
-	if (PAPI_stop(EventSet, values) != PAPI_OK)
+        const char *str= (env)->GetStringUTFChars(methodName,0);
+        //int thread_id =  pthread_self(); 
+        //        printf("PAPI thread id is: %d\n",thread_id);
+   
+        int papi_ret = PAPI_stop(EventSet, values);
+	if (papi_ret != PAPI_OK)
 	{
-		printf("Error\n");
+		cout <<  "PAPI stop Error: " << papi_ret << " : " << str << "\n";
 		return -1;
 	}
 	for(int i = 0; i < NUMEVENTS; i++) {
 		dvalues[i] += (double)values[i];
 	}
 
-	print_results();
+        string mName(str);
+        //cout << "From cpp  ***********" << mName << endl;	
+	print_results(str);
+
+        //need to release this string when done with it in order to
+	//avoid memory leak
+	(env)->ReleaseStringUTFChars(methodName, str);
+
         return ret;
+}
+
+JNIEXPORT void JNICALL Java_papiJ_PAPI_1JNI_1dumpMetrics
+  (JNIEnv *, jobject)
+{
+   writeResults();
 }
 
 JNIEXPORT jlong JNICALL Java_papiJ_f

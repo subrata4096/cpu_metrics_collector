@@ -28,18 +28,26 @@ JNIEXPORT jint JNICALL Java_papiJ_PAPI_1JNI_1threads_1init
 /*
  * Class:     papiJ
  * Method:    PAPI_JNI_start
- * Signature: (I)I
+ * Signature: (Ljava/lang/String;)I
  */
 JNIEXPORT jint JNICALL Java_papiJ_PAPI_1JNI_1start
-  (JNIEnv *, jobject, jint);
+  (JNIEnv *, jobject, jstring);
 
 /*
  * Class:     papiJ
  * Method:    PAPI_JNI_stop
- * Signature: (I)I
+ * Signature: (Ljava/lang/String;)I
  */
 JNIEXPORT jint JNICALL Java_papiJ_PAPI_1JNI_1stop
-  (JNIEnv *, jobject, jint);
+  (JNIEnv *, jobject, jstring);
+
+/*
+ * Class:     papiJ
+ * Method:    PAPI_JNI_dumpMetrics
+ * Signature: ()V
+ */
+JNIEXPORT void JNICALL Java_papiJ_PAPI_1JNI_1dumpMetrics
+  (JNIEnv *, jobject);
 
 /*
  * Class:     papiJ

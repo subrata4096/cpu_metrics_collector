@@ -1,0 +1,3 @@
+In this directory you have lot of examples on how to use PAPI APIS
+NOTE: I have not implemented all PAPI APIs in JNI. Only Init, Start and Stop APIs have been implemented
+
