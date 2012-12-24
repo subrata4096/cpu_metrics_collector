@@ -8,11 +8,10 @@
 #include <papi.h>
 #include "papiJ.h"
 #include <map>
+#include <list>
 
 using namespace std;
 
-//add hw events to be measured...
-//following events are for mensa.ecn.purdue.edu
 static int Events[] = {
  PAPI_L1_DCM,
 PAPI_L2_DCM,
@@ -65,7 +64,6 @@ PAPI_DP_OPS,
 PAPI_VEC_SP,
 PAPI_VEC_DP,
 PAPI_REF_CYC
-
  };
 
 #define NUMEVENTS (sizeof(Events) / sizeof(int))
@@ -77,12 +75,9 @@ static long_long values[NUMEVENTS];
 static double dvalues[NUMEVENTS];
 static map<string,bool> methodNameOutputFileMap;
 static map<string,string> metricsMap;
+static list<string> metricsList;
 void writeResults();
 
-
-//this dumpClass is used mainly for its destructor. We need a hook to know when the program is going to exit.
-//just before exiting we want to print all the metric
-//the destructor of this class will be called when the system is going to exit as it has a static instance..
 class dumpClass
 {
   public:
@@ -150,8 +145,8 @@ string checkFileName(string fName, int i)
 }
 void print_results(const char* methodName)
 {
-        string dumpFileName = string(methodName);
-        dumpFileName = checkFileName(dumpFileName,1);
+        //string dumpFileName = string(methodName);
+        //dumpFileName = checkFileName(dumpFileName,1);
 
         char eventName[PAPI_MAX_STR_LEN];
 	int i;
@@ -167,8 +162,9 @@ void print_results(const char* methodName)
 	//	printf("  Event %15s: %15.0lf\n", eventName, dvalues[i]);
                 ss << dvalues[i] << ",";  
 	}
-        ss << "\n";
-        metricsMap[dumpFileName] = string(ss.str());
+        //ss << "\n";
+        //metricsMap[dumpFileName] = string(ss.str());
+        metricsList.push_back(string(ss.str()));
         
        // printf("\n ***** HERE **  \n");
        // cout << ss.str() << "\n";
@@ -181,12 +177,12 @@ void print_results(const char* methodName)
 
 void writeResults()
 {
-  string outputFileName = "output_papi_results.txt";
+  string outputFileName = "/home/mitra4/output_papi_results.txt";
    ofstream myFile;
    myFile.open(outputFileName.c_str());
   char eventName[PAPI_MAX_STR_LEN];
   int i;
-   myFile << "Function Name,";
+   myFile << "ID,";
    for(i = 0; i < NUMEVENTS; i++) {
                 if (PAPI_event_code_to_name(Events[i], eventName) != PAPI_OK)
                 {
@@ -197,13 +193,16 @@ void writeResults()
         }
     myFile << "\n";
 
-   map<string,string>::iterator ii = metricsMap.begin();
-   map<string,string>::iterator jj = metricsMap.end();
+   //map<string,string>::iterator ii = metricsMap.begin();
+   //map<string,string>::iterator jj = metricsMap.end();
+   list<string>::iterator ii = metricsList.begin();
+   list<string>::iterator jj = metricsList.end();
    for(;ii != jj; ii++)
 {
    
    //myFile << (*ii).first << "\n";
-   myFile << (*ii).second << "\n";
+   //myFile << (*ii).second << "\n";
+   myFile << (*ii) << "\n";
    //cout << (*ii).first << "\n";
    //cout << (*ii).second << "\n";
 }
@@ -231,16 +230,13 @@ void writeResults()
 
 	PAPI_multiplex_init();
 
-
         if (PAPI_thread_init(pthread_self) != PAPI_OK)
         { 
          	printf("PAPI thread init Error\n");
 		//return -1;
                 exit(0);
         }
-
 /*
-      //this API is not low level, not thread safe...so should not be used here....
 	int num_hwcntrs = 0;
 	if ((num_hwcntrs = PAPI_num_counters()) <= PAPI_OK)
 	{
@@ -279,15 +275,15 @@ void writeResults()
 			//return -1;
 
 		}
-		printf("Adding event %d : %d   Error = %d\n",i,Events[i],ret);
-
-//NOTE: check if following call disrupts the behavior....                
-		if(PAPI_overflow(EventSet, Events[i], THRESHOLD, 0, handler) != PAPI_OK)
+		printf("Adding even %d : %d   Error = %d\n",i,Events[i],ret);
+#if 0 
+                ret = PAPI_overflow(EventSet, Events[i], THRESHOLD,0 , handler);
+                if(ret != PAPI_OK)
                 {
-                  //printf("Could not add overflow threashold for Event[%d]: Error\n",i);
-                  //return -1;
+                  printf("Error in adding overflow for %d with error %d\n",i,ret);
                   continue;
                 }
+#endif 
 
 	}
 	ret = PAPI_get_multiplex(EventSet);
@@ -321,6 +317,18 @@ JNIEXPORT jint JNICALL Java_papiJ_PAPI_1JNI_1threads_1init
 {
         //return -1;
         jint ret = PAPI_OK;
+         int xRC, xState;
+        xRC = PAPI_state(EventSet, &xState);
+       if (xRC == PAPI_OK)
+       {
+
+         //if(xState == (PAPI_RUNNING | PAPI_MULTIPLEXING))
+         if(xState != 65)
+        {
+          return -1;
+        }
+      }
+      //cout << "xState:" << xState << "\n";
 const char *str= (env)->GetStringUTFChars(methodName,0);
          //int thread_id =  pthread_self(); 
              //   printf("PAPI thread id is: %d\n",thread_id);
@@ -344,8 +352,35 @@ int papi_ret = PAPI_start(EventSet);
 (JNIEnv *env , jobject obj, jstring methodName)
 {
        //return -1;
-        jint ret = PAPI_OK;
         const char *str= (env)->GetStringUTFChars(methodName,0);
+        jint ret = PAPI_OK;
+        int xRC, xState;
+        xRC = PAPI_state(EventSet, &xState);
+       if (xRC == PAPI_OK)
+       {
+
+         //if(xState == (PAPI_STOPPED | PAPI_MULTIPLEXING))
+         if(xState != 66)
+        {
+               int papi_ret = PAPI_read(EventSet, values);
+               if (papi_ret != PAPI_OK)
+               {
+                 cout <<  "PAPI read Error: " << papi_ret << " : " << str << "\n";
+                
+               }
+               else
+               {
+                   for(int i = 0; i < NUMEVENTS; i++) {
+                       dvalues[i] += (double)values[i];
+                   }
+
+	           print_results(str);
+               }
+	       (env)->ReleaseStringUTFChars(methodName, str);
+               return -1;
+         }
+      }
+        //cout << "xState:" <<xState << "\n";
         //int thread_id =  pthread_self(); 
         //        printf("PAPI thread id is: %d\n",thread_id);
    
