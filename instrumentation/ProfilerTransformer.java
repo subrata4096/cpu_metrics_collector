@@ -16,6 +16,7 @@ public class ProfilerTransformer implements ClassFileTransformer
 	protected static ProfilerTransformer profilerInstance = null;
 	protected Instrumentation instrumentation = null;
 	protected ClassPool classPool;
+        protected MetricsCollector mc;
 	protected boolean off = false;
 	protected String pattern = null;
 	public papiJ p = null;
@@ -29,7 +30,11 @@ public class ProfilerTransformer implements ClassFileTransformer
 	{
 		profilerInstance = this;
                 //attachShutDownHook();
+                
 		p = new papiJ();
+		String pid = p.getPid();
+		mc = new MetricsCollector(pid);
+
 		p.PAPIJ_library_init(papiJ.PAPI_VER_CURRENT);
 
 		classPool = ClassPool.getDefault();
@@ -78,7 +83,7 @@ public class ProfilerTransformer implements ClassFileTransformer
 			byte[] classfileBuffer)
 		throws IllegalClassFormatException
 		{
-
+                     /*
                           if (className.contains("java/lang/Shutdown") && !off) {
 		        	off = true;
 			  //Save data in file
@@ -90,7 +95,7 @@ public class ProfilerTransformer implements ClassFileTransformer
 		        	//System.out.println("AFTER_SHUTDOWN: " + className);
 			     return classfileBuffer;
 	        	}
-
+                        */
 			//System.out.println("class name :" + className);
 			if (!className.contains(pattern)) {
 				//System.out.println("NOT FOUND  " + className);
@@ -138,7 +143,7 @@ public class ProfilerTransformer implements ClassFileTransformer
 
 						String methodName = m.getName();
 						// System.out.println("method name is: " + methodName);
-						String callName = className + "::" + m.getName();
+						String callName = className + "$" + m.getName();
 
 						if(methodName.equals("main")) 
 						{ 
@@ -202,19 +207,20 @@ public class ProfilerTransformer implements ClassFileTransformer
 		}
 
 	public void entryCall(String callName) {
-		//String id = "ENTER-" + 
-			//Thread.currentThread().getName() + "-" + 
-		//	callName;
-		//print("***Wrapper: " + id);
-                ProfilerTransformer.getInstance().p.PAPIJ_start(callName);
+		String id = "ENTER-" + callName;
+		String data = mc.gatherData();
+                //ProfilerTransformer.getInstance().p.PAPIJ_start(id,data);
+               ProfilerTransformer.getInstance().p.PAPIJ_read_counter(id,data);
+		//mc.collectMetrics(id);
 	}
 
 	public void exitCall(String callName) {
-		//String id = "EXIT-" + 
-			//Thread.currentThread().getName() + "-" + 
-		//	callName;
-		//print("***Wrapper: " + id);
-               ProfilerTransformer.getInstance().p.PAPIJ_stop(callName);
+		String id = "EXIT-" + callName;
+		String data = mc.gatherData();
+		//String data = "";
+               //ProfilerTransformer.getInstance().p.PAPIJ_stop(id,data);
+               ProfilerTransformer.getInstance().p.PAPIJ_read_counter(id,data);
+	       //mc.collectMetrics(id);
 	}
 
 	/*private void print(String str) {
@@ -228,9 +234,9 @@ public class ProfilerTransformer implements ClassFileTransformer
 	  call.charAt(3)=='a' &&
 	  call.charAt(4)=='/');
 	  }*/
-	/*
+	
 	   public void saveData() {
-//mc.saveData();
-} */
+            mc.saveData();
+           } 
 }
 

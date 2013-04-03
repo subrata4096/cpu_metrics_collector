@@ -92,6 +92,12 @@ class dumpClass
      cout << " *** destructor called " << "\n";
      writeResults();
      delete i;
+     int papi_ret = PAPI_stop(EventSet, values);
+     if (papi_ret != PAPI_OK)
+     {
+                cout <<  "PAPI stop Error: " << papi_ret << "\n";
+     }
+
   }
 
 };
@@ -143,7 +149,7 @@ string checkFileName(string fName, int i)
         string fModified = string(ss.str());
         return checkFileName(fModified,(i+1));
 }
-void print_results(const char* methodName)
+void print_results(const char* methodName,string data)
 {
         //string dumpFileName = string(methodName);
         //dumpFileName = checkFileName(dumpFileName,1);
@@ -151,7 +157,7 @@ void print_results(const char* methodName)
         char eventName[PAPI_MAX_STR_LEN];
 	int i;
         stringstream ss;
-        ss << string(methodName) << "," ;
+        ss << string(methodName) << "," << data ;
 	for(i = 0; i < NUMEVENTS; i++) {
 		if (PAPI_event_code_to_name(Events[i], eventName) != PAPI_OK)
 		{
@@ -160,20 +166,28 @@ void print_results(const char* methodName)
                         continue;
 		}
 	//	printf("  Event %15s: %15.0lf\n", eventName, dvalues[i]);
-                ss << dvalues[i] << ",";  
+                ss << "," << dvalues[i] ;  
 	}
         //ss << "\n";
         //metricsMap[dumpFileName] = string(ss.str());
         metricsList.push_back(string(ss.str()));
         
-       // printf("\n ***** HERE **  \n");
-       // cout << ss.str() << "\n";
+       //printf("\n ***** HERE **  \n");
+       //cout << ss.str() << "\n";
         //fstream myFile;
         //string fName = "/home/mitra4/" + dumpFileName;
         //myFile.open(fName.c_str());
         //myFile << ss.str();
         //myFile.close();
 }
+
+string getMetricNames() 
+{
+		string ret = string("ID,minflt,majflt,utime,stime,num_threads,vsize,rss,") +
+				string("startstack,kstkeip,processor,num_file_desc,rchar,wchar,") +
+				string("read_bytes,write_bytes,cancelled_write_bytes");
+		return ret;
+	}
 
 void writeResults()
 {
@@ -182,14 +196,14 @@ void writeResults()
    myFile.open(outputFileName.c_str());
   char eventName[PAPI_MAX_STR_LEN];
   int i;
-   myFile << "ID,";
+   myFile << getMetricNames();
    for(i = 0; i < NUMEVENTS; i++) {
                 if (PAPI_event_code_to_name(Events[i], eventName) != PAPI_OK)
                 {
                         printf("PAPI event code to name Error\n");
                         continue;
                 }
-                myFile << eventName << ",";
+                myFile << "," << eventName;
         }
     myFile << "\n";
 
@@ -209,6 +223,14 @@ void writeResults()
 
    myFile.close();
 
+}
+
+JNIEXPORT jstring JNICALL Java_papiJ_getPid(JNIEnv *env, jobject obj)
+{
+   int pid = (int)getpid();
+        char buff[256];
+        sprintf(buff, "%d", pid);
+        return env->NewStringUTF(buff);
 }
 
 
@@ -293,6 +315,13 @@ void writeResults()
 //	printf("This system has %d available counters.\n", num_hwcntrs);
 	int num_events = 1*NUMEVENTS;
 	printf("We will count %d events.\n", num_events);
+       
+        int papi_ret = PAPI_start(EventSet);
+        if (papi_ret != PAPI_OK)
+        {
+                cout << "PAPI start Error : " << papi_ret << "\n";
+                return -1;
+        }
 
 
 	return ret;
@@ -313,7 +342,7 @@ JNIEXPORT jint JNICALL Java_papiJ_PAPI_1JNI_1threads_1init
 }
 
 	JNIEXPORT jint JNICALL Java_papiJ_PAPI_1JNI_1start
-(JNIEnv * env, jobject obj, jstring methodName)
+(JNIEnv * env, jobject obj, jstring methodName,jstring data)
 {
         //return -1;
         jint ret = PAPI_OK;
@@ -332,6 +361,8 @@ JNIEXPORT jint JNICALL Java_papiJ_PAPI_1JNI_1threads_1init
 const char *str= (env)->GetStringUTFChars(methodName,0);
          //int thread_id =  pthread_self(); 
              //   printf("PAPI thread id is: %d\n",thread_id);
+
+//return ret;
 int papi_ret = PAPI_start(EventSet);
 	if (papi_ret != PAPI_OK)
 	{
@@ -340,19 +371,20 @@ int papi_ret = PAPI_start(EventSet);
 		return -1;
 	}
         else
-{
-//  printf("PAPI start Good\n");
+        {
+         //  printf("PAPI start Good\n");
 
-}
+       }
 	(env)->ReleaseStringUTFChars(methodName, str);
         return ret;
 }
 
 	JNIEXPORT jint JNICALL Java_papiJ_PAPI_1JNI_1stop
-(JNIEnv *env , jobject obj, jstring methodName)
+(JNIEnv *env , jobject obj, jstring methodName, jstring data)
 {
        //return -1;
         const char *str= (env)->GetStringUTFChars(methodName,0);
+	const char *data_str= (env)->GetStringUTFChars(data,0);
         jint ret = PAPI_OK;
         int xRC, xState;
         xRC = PAPI_state(EventSet, &xState);
@@ -374,9 +406,10 @@ int papi_ret = PAPI_start(EventSet);
                        dvalues[i] += (double)values[i];
                    }
 
-	           print_results(str);
+	           print_results(str,string(data_str));
                }
 	       (env)->ReleaseStringUTFChars(methodName, str);
+	        (env)->ReleaseStringUTFChars(data, data_str);
                return -1;
          }
       }
@@ -396,14 +429,42 @@ int papi_ret = PAPI_start(EventSet);
 
         string mName(str);
         //cout << "From cpp  ***********" << mName << endl;	
-	print_results(str);
+	print_results(str,string(data_str));
 
         //need to release this string when done with it in order to
 	//avoid memory leak
 	(env)->ReleaseStringUTFChars(methodName, str);
+	(env)->ReleaseStringUTFChars(data, data_str);
 
         return ret;
 }
+
+       JNIEXPORT jint JNICALL Java_papiJ_PAPI_1JNI_1readCounter
+(JNIEnv *env , jobject obj, jstring methodName, jstring data)
+{
+        const char *str= (env)->GetStringUTFChars(methodName,0);
+        const char *data_str= (env)->GetStringUTFChars(data,0);
+        jint ret = PAPI_OK;
+               int papi_ret = PAPI_read(EventSet, values);
+               if (papi_ret != PAPI_OK)
+               {
+                 cout <<  "PAPI read Error: " << papi_ret << " : " << str << "\n";
+               }
+               else
+               {
+                   for(int i = 0; i < NUMEVENTS; i++) {
+                       dvalues[i] += (double)values[i];
+                   }
+
+                   print_results(str,string(data_str));
+               }
+               (env)->ReleaseStringUTFChars(methodName, str);
+                (env)->ReleaseStringUTFChars(data, data_str);
+
+        return ret;
+}
+
+
 
 JNIEXPORT void JNICALL Java_papiJ_PAPI_1JNI_1dumpMetrics
   (JNIEnv *, jobject)

@@ -31,15 +31,24 @@ JNIEXPORT jint JNICALL Java_papiJ_PAPI_1JNI_1threads_1init
  * Signature: (Ljava/lang/String;)I
  */
 JNIEXPORT jint JNICALL Java_papiJ_PAPI_1JNI_1start
-  (JNIEnv *, jobject, jstring);
+  (JNIEnv *, jobject, jstring, jstring);
 
 /*
  * Class:     papiJ
  * Method:    PAPI_JNI_stop
- * Signature: (Ljava/lang/String;)I
+ * Signature: (Ljava/lang/String;Ljava/lang/String;)I
  */
 JNIEXPORT jint JNICALL Java_papiJ_PAPI_1JNI_1stop
-  (JNIEnv *, jobject, jstring);
+  (JNIEnv *, jobject, jstring, jstring);
+
+/*
+ * Class:     papiJ
+ * Method:    PAPI_JNI_readCounter
+ * Signature: (Ljava/lang/String;Ljava/lang/String;)I
+ */
+JNIEXPORT jint JNICALL Java_papiJ_PAPI_1JNI_1readCounter
+  (JNIEnv *, jobject, jstring, jstring);
+
 
 /*
  * Class:     papiJ
@@ -47,6 +56,14 @@ JNIEXPORT jint JNICALL Java_papiJ_PAPI_1JNI_1stop
  * Signature: ()V
  */
 JNIEXPORT void JNICALL Java_papiJ_PAPI_1JNI_1dumpMetrics
+  (JNIEnv *, jobject);
+
+/*
+ * Class:     papiJ
+ * Method:    getPid
+ * Signature: ()Ljava/lang/String;
+ */
+JNIEXPORT jstring JNICALL Java_papiJ_getPid
   (JNIEnv *, jobject);
 
 /*

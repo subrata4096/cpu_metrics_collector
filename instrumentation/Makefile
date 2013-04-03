@@ -11,8 +11,8 @@ clean:
 	rm -rf $(OUTPUT_SO)
 
 java:
-	rm -rf papiJ.class ProfilerMain.class ProfilerTransformer.class
-	javac -classpath .:$(JAVASSIST) papiJ.java AddShutdownHook.java ProfilerTransformer.java ProfilerMain.java
+	rm -rf papiJ.class ProfilerMain.class ProfilerTransformer.class MetricsCollector.class
+	javac -classpath .:$(JAVASSIST) papiJ.java AddShutdownHook.java MetricsCollector.java ProfilerTransformer.java ProfilerMain.java
 
 jar:
 	#jar cfm papiJ_jar.jar Manifest.txt papiJ.class
